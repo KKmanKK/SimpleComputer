@@ -1,0 +1,62 @@
+# ... предыдущие определения ...
+CC = gcc
+CFLAGS = -Wall -Werror -Wextra -I./include
+AR = ar
+ARFLAGS = rcs
+
+# Директории
+CONSOLE_DIR = console
+MY_SIMPLE_COMPUTER_DIR = mySimpleComputer
+OBJ_DIR = obj
+
+# Исходные файлы библиотеки
+SC_SRCS = $(MY_SIMPLE_COMPUTER_DIR)/sc_memory.c \
+          $(MY_SIMPLE_COMPUTER_DIR)/sc_reg.c \
+          $(MY_SIMPLE_COMPUTER_DIR)/sc_accumulator.c \
+          $(MY_SIMPLE_COMPUTER_DIR)/sc_icounter.c \
+          $(MY_SIMPLE_COMPUTER_DIR)/sc_command.c \
+          $(MY_SIMPLE_COMPUTER_DIR)/print_utils.c
+
+# Объектные файлы библиотеки
+SC_OBJS = $(addprefix $(OBJ_DIR)/, $(notdir $(SC_SRCS:.c=.o)))
+
+# Библиотека
+LIB_SC = $(MY_SIMPLE_COMPUTER_DIR)/libmySimpleComputer.a
+
+# Исходные файлы тестовой программы
+PR01_SRC = $(CONSOLE_DIR)/pr01.c
+
+# Цель по умолчанию
+all: $(LIB_SC) $(CONSOLE_DIR)/pr01
+
+# Сборка библиотеки
+$(LIB_SC): $(SC_OBJS) | $(MY_SIMPLE_COMPUTER_DIR)
+	$(AR) $(ARFLAGS) $@ $^
+
+# Сборка объектных файлов библиотеки
+$(OBJ_DIR)/%.o: $(MY_SIMPLE_COMPUTER_DIR)/%.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Сборка тестовой программы pr01
+$(CONSOLE_DIR)/pr01: $(OBJ_DIR)/pr01.o $(LIB_SC)
+	$(CC) $(CFLAGS) -o $@ $^ -L$(MY_SIMPLE_COMPUTER_DIR) -lmySimpleComputer
+
+# Сборка объектного файла pr01.o
+$(OBJ_DIR)/pr01.o: $(PR01_SRC) | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Создание директории для объектных файлов
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
+
+# Создание директории для библиотеки (если не существует)
+$(MY_SIMPLE_COMPUTER_DIR):
+	mkdir -p $(MY_SIMPLE_COMPUTER_DIR)
+
+# Очистка
+clean:
+	rm -rf $(OBJ_DIR)
+	rm -f $(LIB_SC)
+	rm -f $(CONSOLE_DIR)/pr01
+
+.PHONY: all clean
