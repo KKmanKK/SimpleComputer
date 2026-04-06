@@ -64,7 +64,7 @@ int sc_memoryLoad(char *filename) {
 /* ========== РЕГИСТРЫ ========== */
 
 int sc_regInit(void) {
-    sc_flags = 0;
+    sc_flags = 1 << (REG_IGNORE_TICKS - 1);
     return 0;
 }
 
