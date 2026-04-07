@@ -12,10 +12,9 @@
 
 extern struct termios save;
 
-enum keys
-{
+enum keys {
     KEY_L,
-    KEY_S,
+    KEY_S,    // Должен быть определен для такта
     KEY_R,
     KEY_T,
     KEY_I,

@@ -19,6 +19,8 @@
 
 extern short int sc_accumulator;
 extern uint8_t sc_instructionCounter;
+extern bool sc_running;        // Флаг работы модели
+extern bool sc_stepMode;       // Флаг пошагового режима
 
 int sc_memoryInit(void);
 int sc_memorySet(int8_t address, short int value);
@@ -30,5 +32,14 @@ int sc_regSet(int8_t reg, bool value);
 int sc_regGet(int8_t reg, bool *value);
 int sc_commandEncode(short int command, short int operand, short int *value);
 int sc_commandDecode(short int value, short int *command, short int *operand);
+
+// Новые функции для моделирования
+int ALU(int command, int operand);
+void CU(void);
+void IRC(int signum);
+void sc_start(void);
+void sc_stop(void);
+void sc_step(void);
+int sc_getCurrentCommand(short int *command, short int *operand);
 
 #endif // SIMPLECOMPUTER_H

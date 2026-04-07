@@ -11,26 +11,20 @@
 
 struct termios save;
 
-/// Аналог pause, но не pause
-/// \param time
-/// \return 0  - в случае успешного выполнения, -1 - в случае ошибки
 int rk_pause(int time) {
     fflush(stdout); // очистка потока вывода
     char buffer[5] = "\0";
     rk_myTermRegime(false, time, 0, false, false);
-    read(fileno(stdin), buffer, 5);
+    read(STDIN_FILENO, buffer, 5);
     rk_myTermRestore();
     return 0;
 }
 
-/// Возвращающую первую клавишу, которую нажал пользователь
-/// \param key - Адрес переменной, в которую возвращается номер нажатой клавиши
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
 int rk_readKey(enum keys *key) {
     fflush(stdout); // очистка потока вывода
     char buffer[5] = "\0";
     rk_myTermRegime(false, 1, 0, false, false);
-    read(fileno(stdin), buffer, 5);
+    read(STDIN_FILENO, buffer, 5);
     rk_myTermRestore();
 
     if (buffer[0] == '\033') {
@@ -72,31 +66,21 @@ int rk_readKey(enum keys *key) {
     return 0;
 }
 
-/// Функция, сохраняющая текущие параметры терминала
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
 int rk_myTermSave(void) {
-    if (tcgetattr(fileno(stdin), &save))
+    if (tcgetattr(STDIN_FILENO, &save))
         return -1;
     return 0;
 }
 
-/// Функция, восстанавливающая сохраненные параметры терминала
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
 int rk_myTermRestore(void) {
-    tcsetattr(fileno(stdin), TCSAFLUSH, &save);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &save);
     return 0;
 }
 
-/// Функция, переключающая режим работы терминала (канонический / неканонический)
-/// \param regime
-/// \param vtime
-/// \param vmin
-/// \param echo
-/// \param sigint
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+
 int rk_myTermRegime(bool regime, unsigned int vtime, unsigned int vmin, bool echo, bool sigint) {
     struct termios curr;
-    tcgetattr(fileno(stdin), &curr);
+    tcgetattr(STDIN_FILENO, &curr);
 
     if (regime)
         curr.c_lflag |= ICANON;
@@ -115,6 +99,6 @@ int rk_myTermRegime(bool regime, unsigned int vtime, unsigned int vmin, bool ech
         curr.c_cc[VMIN] = vmin;
         curr.c_cc[VTIME] = vtime;
     }
-    tcsetattr(0, TCSAFLUSH, &curr);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &curr);
     return 0;
 }

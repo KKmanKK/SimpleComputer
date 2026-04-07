@@ -1,7 +1,7 @@
 # Компилятор и флаги
 CC = gcc
 CFLAGS = -Wall -Wextra -Werror -std=c11 -g
-LDFLAGS = -lncurses
+LDFLAGS = 
 
 # Директории
 SRCDIR = .
@@ -58,11 +58,6 @@ debug: all
 valgrind: all
 	valgrind --leak-check=full --track-origins=yes ./$(TARGET)
 
-# Установка зависимостей (для Ubuntu/Debian)
-deps:
-	sudo apt-get update
-	sudo apt-get install -y gcc make valgrind
-
 # Справка
 help:
 	@echo "Доступные цели:"
@@ -72,7 +67,6 @@ help:
 	@echo "  make distclean - полная очистка"
 	@echo "  make debug     - собрать с отладочной информацией"
 	@echo "  make valgrind  - проверить утечки памяти"
-	@echo "  make deps      - установить зависимости (Ubuntu/Debian)"
 	@echo "  make help      - показать эту справку"
 
-.PHONY: all clean distclean run debug valgrind deps help directories
+.PHONY: all clean distclean run debug valgrind help directories
