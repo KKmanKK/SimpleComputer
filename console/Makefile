@@ -1,20 +1,25 @@
 CC = gcc
-CFLAGS = -g -Wall -Wextra -Werror -I../include -pthread
+CFLAGS = -g -Wall -I../include
 LDFLAGS = -L../mySimpleComputer -L../myTerm -L../myBigChars -L../myReadkey
-LDLIBS = -lmySimpleComputer -lmyTerm -lmyBigChars -lmyReadkey -pthread
+LIBS = -lmySimpleComputer -lmyTerm -lmyBigChars -lmyReadkey
 
-SRCS = console.c
+TARGET = SimpleComputer
+
+SRCS = $(wildcard *.c)
+
 OBJS = $(SRCS:.c=.o)
-TARGET = console
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS) $(LDLIBS)
+	$(CC) $(OBJS) -o $(TARGET) $(LDFLAGS) $(LIBS)
+
+.PHONY: clean
 
 clean:
-	rm -f $(OBJS) $(TARGET)
-
-run: $(TARGET)
-	./$(TARGET)
+	rm -f *.o
+	
+clean_all:
+	rm -f *.o
+	rm -f $(OBJ) $(TARGET)

@@ -1,17 +1,19 @@
 CC = gcc
-CFLAGS = -g -Wall -Wextra -Werror -I../include
-AR = ar
-ARFLAGS = rcs
+CFLAGS = -g -Wall -I../include
 
 SRCS = myTerm.c
+
 OBJS = $(SRCS:.c=.o)
+
 LIBRARY = libmyTerm.a
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(LIBRARY): $(OBJS)
-	$(AR) $(ARFLAGS) $@ $^
+	ar rcs $(LIBRARY) $(OBJS)
+
+.PHONY: clean
 
 clean:
 	rm -f $(OBJS) $(LIBRARY)

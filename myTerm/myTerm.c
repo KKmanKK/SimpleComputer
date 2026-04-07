@@ -4,7 +4,8 @@
 #include "../include/myTerm.h"
 
 int mt_clrscr(void) {
-    printf("\033[H\033[J");
+    printf("\E[H\E[2J");
+    printf("\033[H");
     return 0;
 }
 
@@ -14,41 +15,43 @@ int mt_gotoXY(int x, int y) {
     return 0;
 }
 
-int mt_getscreensize(int *rows, int *cols) {
-    struct winsize ws;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1)
-        return -1;
-    if (rows) *rows = ws.ws_row;
-    if (cols) *cols = ws.ws_col;
-    return 0;
+int mt_getscreensize(int* rows, int* cols) {
+    if (rows == NULL || cols == NULL) return -1;
+    else {
+        struct winsize w;
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+        *rows = w.ws_row;
+        *cols = w.ws_col;
+        return 0;
+    }
 }
 
-int mt_setfgcolor(enum colors color) {
+int mt_setfgcolor(enum color color) {
     if (color < 0 || color > 7) return -1;
     printf("\033[3%dm", color);
     return 0;
 }
 
-int mt_setbgcolor(enum colors color) {
+int mt_setbgcolor(enum color color) {
     if (color < 0 || color > 7) return -1;
     printf("\033[4%dm", color);
     return 0;
 }
 
-int mt_setdefaultcolor(void) {
-    printf("\033[0m");
-    return 0;
-}
+// int mt_setdefaultcolor(void) {
+//     printf("\033[0m");
+//     return 0;
+// }
 
-int mt_setcursorvisible(int value) {
-    if (value)
-        printf("\033[?25h");
-    else
-        printf("\033[?25l");
-    return 0;
-}
+// int mt_setcursorvisible(int value) {
+//     if (value)
+//         printf("\033[?25h");
+//     else
+//         printf("\033[?25l");
+//     return 0;
+// }
 
-int mt_delline(void) {
-    printf("\033[2K\r");
-    return 0;
-}
+// int mt_delline(void) {
+//     printf("\033[2K\r");
+//     return 0;
+// }

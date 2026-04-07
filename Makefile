@@ -1,45 +1,39 @@
 CC = gcc
-CFLAGS = -g -Wall -Wextra -Werror -I./include -pthread
+CFLAGS = -g
 
-# Директории
-MY_SIMPLE_COMPUTER_DIR = mySimpleComputer
-MY_TERM_DIR = myTerm
-MY_BIGCHARS_DIR = myBigChars
-MY_READKEY_DIR = myReadkey
-CONSOLE_DIR = console
+.PHONY: all clean
 
-# Библиотеки
-LIBS = -L$(MY_SIMPLE_COMPUTER_DIR) -lmySimpleComputer \
-       -L$(MY_TERM_DIR) -lmyTerm \
-       -L$(MY_BIGCHARS_DIR) -lmyBigChars \
-       -L$(MY_READKEY_DIR) -lmyReadkey
+TARGET = SimpleComputer
 
-# Цели
-.PHONY: all clean $(MY_SIMPLE_COMPUTER_DIR) $(MY_TERM_DIR) $(MY_BIGCHARS_DIR) $(MY_READKEY_DIR) console
+all: mySimpleComputer.a myTerm.a myBigChars.a myReadkey.a SimpleComputer clean
 
-all: $(MY_SIMPLE_COMPUTER_DIR) $(MY_TERM_DIR) $(MY_BIGCHARS_DIR) $(MY_READKEY_DIR) console
+mySimpleComputer.a:
+	cd mySimpleComputer && $(MAKE)
 
-# Сборка библиотек
-$(MY_SIMPLE_COMPUTER_DIR):
-	$(MAKE) -C $@
+myTerm.a:
+	cd myTerm && $(MAKE)
 
-$(MY_TERM_DIR):
-	$(MAKE) -C $@
+myBigChars.a:
+	cd myBigChars && $(MAKE)
 
-$(MY_BIGCHARS_DIR):
-	$(MAKE) -C $@
+myReadkey.a:
+	cd myReadkey && $(MAKE)
 
-$(MY_READKEY_DIR):
-	$(MAKE) -C $@
+SimpleComputer:
+	cd console && $(MAKE)
 
-# Сборка консоли
-console:
-	$(MAKE) -C $(CONSOLE_DIR)
-
-# Очистка
 clean:
-	$(MAKE) -C $(MY_SIMPLE_COMPUTER_DIR) clean
-	$(MAKE) -C $(MY_TERM_DIR) clean
-	$(MAKE) -C $(MY_BIGCHARS_DIR) clean
-	$(MAKE) -C $(MY_READKEY_DIR) clean
-	$(MAKE) -C $(CONSOLE_DIR) clean
+	cd mySimpleComputer && $(MAKE) clean
+	cd myTerm && $(MAKE) clean
+	cd myBigChars && $(MAKE) clean
+	cd myReadkey && $(MAKE) clean
+	cd console && $(MAKE) clean
+	rm -f *.o
+
+clean_all:
+	cd mySimpleComputer && $(MAKE) clean
+	cd myTerm && $(MAKE) clean
+	cd myBigChars && $(MAKE) clean
+	cd myReadkey && $(MAKE) clean
+	cd console && $(MAKE) clean_all
+	rm -f *.o
