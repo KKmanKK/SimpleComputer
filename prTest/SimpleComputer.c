@@ -8,45 +8,37 @@
 #include <unistd.h>
 #include <signal.h>
 #include "SimpleComputer.h"
+#include <stdlib.h>   // Добавить для strtol()
+#include <string.h>   // Добавить для strlen() если нужно
 
 short int sc_memory[SC_MEM_SIZE];
 uint8_t sc_regFLAGS;
-
 short int sc_accumulator;
 uint8_t sc_instructionCounter;
 bool sc_running = false;
 bool sc_stepMode = false;
 
 /// Инициализирует оперативную память SC, задавая всем её ячейкам нулевые значения
-/// \return 0
 int sc_memoryInit(void) {
-    sc_instructionCounter = 0;
     for (int i = 0; i < SC_MEM_SIZE; ++i)
         sc_memory[i] = 0;
     return 0;
 }
 
 /// Задает значение указанной ячейки памяти
-/// \param address - ячейка памяти
-/// \param value - значение
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int sc_memorySet(int8_t address, short int value) {
+int sc_memorySet(int address, short int value) {
     if (address < 0 || address >= SC_MEM_SIZE) {
-        sc_regSet(OUT_OF_MEMORY, true);
+        sc_regSet(FLAG_OUT_OF_MEMORY, 1);
         return -1;
     }
-    
     sc_memory[address] = value;
     return 0;
 }
 
 /// Возвращает значение указанной ячейки памяти
-/// \param address - ячейка памяти
-/// \param value - значение
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int sc_memoryGet(int8_t address, short int *value) {
+int sc_memoryGet(int address, short int *value) {
     if (address < 0 || address >= SC_MEM_SIZE) {
-        sc_regSet(OUT_OF_MEMORY, true);
+        sc_regSet(FLAG_OUT_OF_MEMORY, 1);
         return -1;
     }
     *value = sc_memory[address];
@@ -54,267 +46,390 @@ int sc_memoryGet(int8_t address, short int *value) {
 }
 
 /// Сохраняет содержимое памяти в файл в бинарном виде
-/// \param filename - имя файла
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int sc_memorySave(char* filename) {
-    FILE *fb;
-    if (!(fb = fopen(filename, "wb"))) {
-        return -1;
-    }
-    fwrite(sc_memory, sizeof(sc_memory), 1, fb);
+int sc_memorySave(char *filename) {
+    FILE *fb = fopen(filename, "wb");
+    if (!fb) return -1;
+    fwrite(sc_memory, sizeof(short int), SC_MEM_SIZE, fb);
     fclose(fb);
     return 0;
 }
 
 /// Загружает из указанного файла содержимое оперативной памяти
-/// \param filename - имя файла
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int sc_memoryLoad(char* filename) {
-    FILE *fb;
-    if (!(fb = fopen(filename, "rb"))) {
-        return -1;
-    }
-    fread(sc_memory, sizeof(sc_memory), 1, fb);
+int sc_memoryLoad(char *filename) {
+    FILE *fb = fopen(filename, "rb");
+    if (!fb) return -1;
+    fread(sc_memory, sizeof(short int), SC_MEM_SIZE, fb);
     fclose(fb);
     return 0;
 }
 
-/// Инициализирует регистр флагов нулевым значением
-/// \return 0
+/// Инициализирует регистр флагов значениями по умолчанию
 int sc_regInit(void) {
     sc_regFLAGS = 0;
+    sc_regSet(FLAG_IGNORE_CLOCK, 1);  // T = 1 по умолчанию
     return 0;
 }
 
 /// Устанавливает значение указанного регистра флагов
-/// \param reg - флаг
-/// \param value - значение
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int sc_regSet(int8_t reg, bool value) {
-    if (reg < 0 || reg >= SC_REG_SIZE)
-        return -1;
-    
+int sc_regSet(int reg, int value) {
+    if (reg < 0 || reg >= SC_REG_SIZE) return -1;
     if (value)
         sc_regFLAGS |= (1 << reg);
     else
         sc_regFLAGS &= ~(1 << reg);
-    
     return 0;
 }
 
 /// Возвращает значение указанного флага
-/// \param reg - флаг
-/// \param value - значение
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int sc_regGet(int8_t reg, bool *value) {
-    if (reg < 0 || reg >= SC_REG_SIZE)
-        return -1;
-    
-    *value = (sc_regFLAGS & (1 << reg)) != 0;
+int sc_regGet(int reg, int *value) {
+    if (reg < 0 || reg >= SC_REG_SIZE) return -1;
+    *value = (sc_regFLAGS & (1 << reg)) ? 1 : 0;
     return 0;
 }
 
-/// Кодирует команду с указанным номером и операндом и помещает результат в value
-/// \param command - команда
-/// \param operand - операнд
-/// \param value - значение
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int sc_commandEncode(short int command, short int operand, short int *value) {
-    if (!(command > 0x9 && command < 0x12) && 
-        !(command > 0x19 && command < 0x22) && 
-        !(command > 0x29 && command < 0x34) && 
-        !(command > 0x39 && command < 0x77))
-        return -1;
-    
-    if ((operand < 0) || (operand > 0x7F))
-        return -1;
+/// Инициализирует аккумулятор значением по умолчанию
+int sc_accumulatorInit(void) {
+    sc_accumulator = 0;
+    return 0;
+}
+
+/// Устанавливает значение аккумулятора
+int sc_accumulatorSet(int value) {
+    if (value < -32768 || value > 32767) return -1;
+    sc_accumulator = (short int)value;
+    return 0;
+}
+
+/// Возвращает значение аккумулятора
+int sc_accumulatorGet(int *value) {
+    if (!value) return -1;
+    *value = sc_accumulator;
+    return 0;
+}
+
+/// Инициализирует счетчик команд
+int sc_icounterInit(void) {
+    sc_instructionCounter = 0;
+    return 0;
+}
+
+/// Устанавливает значение счетчика команд
+int sc_icounterSet(int value) {
+    if (value < 0 || value >= SC_MEM_SIZE) return -1;
+    sc_instructionCounter = (uint8_t)value;
+    return 0;
+}
+
+/// Возвращает значение счетчика команд
+int sc_icounterGet(int *value) {
+    if (!value) return -1;
+    *value = sc_instructionCounter;
+    return 0;
+}
+
+/// Кодирует команду
+int sc_commandEncode(int sign, int command, int operand, int *value) {
+    if (sign != 0 && sign != 1) return -1;
+    if (sc_commandValidate(command) != 0) return -1;
+    if (operand < 0 || operand > 0x7F) return -1;
     
     *value = 0;
-    /* Операнд */
-    for (int i = 0; i < 7; i++) {
-        int8_t bit = (operand >> i) & 1;
-        *value |= (bit << i);
-    }
-    /* Команда */
-    for (int i = 0; i < 7; i++) {
-        int8_t bit = (command >> i) & 1;
-        *value |= (bit << (i + 7));
+    *value |= (sign << 14);
+    *value |= ((command & 0x7F) << 7);
+    *value |= (operand & 0x7F);
+    return 0;
+}
+
+/// Декодирует значение как команду
+int sc_commandDecode(int value, int *sign, int *command, int *operand) {
+    *sign = (value >> 14) & 1;
+    *command = (value >> 7) & 0x7F;
+    *operand = value & 0x7F;
+    
+    if (sc_commandValidate(*command) != 0) {
+        sc_regSet(FLAG_INVALID_COMMAND, 1);
+        return -1;
     }
     return 0;
 }
 
-/// Декодирует значение как команду SC
-/// \param value - значение
-/// \param command - команда
-/// \param operand - операнд
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int sc_commandDecode(short int value, short int *command, short int *operand) {
-    int tmpCom = 0, tmpOp = 0;
-    
-    if ((value >> 14) & 1) {
-        sc_regSet(INCORRECT_COMMAND, true);
-        return -1;
+/// Проверяет корректность команды
+int sc_commandValidate(int command) {
+    // Проверка по всем допустимым командам
+    switch(command) {
+        case CMD_NOP: case CMD_CPUINFO:
+        case CMD_READ: case CMD_WRITE:
+        case CMD_LOAD: case CMD_STORE:
+        case CMD_ADD: case CMD_SUB: case CMD_DIVIDE: case CMD_MUL:
+        case CMD_JUMP: case CMD_JNEG: case CMD_JZ: case CMD_HALT:
+        case CMD_NOT: case CMD_AND: case CMD_OR: case CMD_XOR:
+        case CMD_JNS: case CMD_JC: case CMD_JNC: case CMD_JP: case CMD_JNP:
+        case CMD_CHL: case CMD_SHR: case CMD_RCL: case CMD_RCR: case CMD_NEG:
+        case CMD_ADDC: case CMD_SUBC: case CMD_LOGLC: case CMD_LOGRC:
+        case CMD_RCCL: case CMD_RCCR: case CMD_MOVA: case CMD_MOVR:
+        case CMD_MOVCA: case CMD_MOVCR: case CMD_ADDC_M: case CMD_SUBC_M:
+            return 0;
+        default:
+            return -1;
     }
-    
-    for (int i = 0; i < 7; i++) {
-        int bit = (value >> i) & 1;
-        tmpOp |= (bit << i);
-    }
-    
-    for (int i = 0; i < 7; i++) {
-        int bit = (value >> (i + 7)) & 1;
-        tmpCom |= (bit << i);
-    }
-    
-    if (!(tmpCom > 0x9 && tmpCom < 0x12) && 
-        !(tmpCom > 0x19 && tmpCom < 0x22) && 
-        !(tmpCom > 0x29 && tmpCom < 0x34) && 
-        !(tmpCom > 0x39 && tmpCom < 0x77)) {
-        sc_regSet(INCORRECT_COMMAND, true);
-        return -1;
-    }
-    
-    if ((tmpOp < 0) || (tmpOp > 0x7F)) {
-        sc_regSet(INCORRECT_COMMAND, true);
-        return -1;
-    }
-    
-    *command = tmpCom;
-    *operand = tmpOp;
-    return 0;
 }
 
-/// Функция для получения текущей команды
-int sc_getCurrentCommand(short int *command, short int *operand) {
+/// Получение текущей команды
+int sc_getCurrentCommand(int *command, int *operand) {
     short int value;
-    if (sc_memoryGet(sc_instructionCounter, &value) != 0) {
-        return -1;
-    }
-    
-    if (((value >> 14) & 1) == 0) {
-        sc_regSet(INCORRECT_COMMAND, true);
-        return -1;
-    }
-    
-    return sc_commandDecode(value, command, operand);
+    int sign;
+    if (sc_memoryGet(sc_instructionCounter, &value) != 0) return -1;
+    return sc_commandDecode(value, &sign, command, operand);
 }
 
-// Добавьте в начало файла после других include
-#include <signal.h>
-#include <unistd.h>
-
-// ... остальной код ...
-
-// IRC - контроллер прерываний
-void IRC(int signum) {
-    bool ignoreTact;
-    sc_regGet(IGNORING_TACT_PULSES, &ignoreTact);
+/// Арифметико-логическое устройство
+int ALU(int command, int operand) {
+    short int memory_value;
+    int result;
     
-    if (signum == SIGALRM) {
-        if (!ignoreTact && sc_running) {
-            CU();
-            // Перезапускаем таймер только если модель все еще работает
-            if (sc_running) {
-                alarm(1);
+    switch(command) {
+        case CMD_ADD:
+            if (sc_memoryGet(operand, &memory_value) != 0) return -1;
+            result = sc_accumulator + memory_value;
+            if (result > 32767 || result < -32768) {
+                sc_regSet(FLAG_OVERFLOW, 1);
+                return -1;
             }
-        }
-    } else if (signum == SIGUSR1) {
-        // Сброс системы
-        sc_regInit();
-        sc_instructionCounter = 0;
-        sc_accumulator = 0;
-        sc_running = false;
-        sc_stepMode = false;
-        sc_regSet(IGNORING_TACT_PULSES, true);
-        alarm(0);  // Остановка таймера
-    }
+            sc_accumulator = (short int)result;
+            break;
+            
+        case CMD_SUB:
+            if (sc_memoryGet(operand, &memory_value) != 0) return -1;
+            result = sc_accumulator - memory_value;
+            if (result > 32767 || result < -32768) {
+                sc_regSet(FLAG_OVERFLOW, 1);
+                return -1;
+            }
+            sc_accumulator = (short int)result;
+            break;
+            
+        case CMD_DIVIDE:
+            if (sc_memoryGet(operand, &memory_value) != 0) return -1;
+            if (memory_value == 0) {
+                sc_regSet(FLAG_DIVISION_BY_ZERO, 1);
+                return -1;
+            }
+            sc_accumulator = (short int)(sc_accumulator / memory_value);
+            break;
+            
+        case CMD_MUL:
+            if (sc_memoryGet(operand, &memory_value) != 0) return -1;
+            result = sc_accumulator * memory_value;
+            if (result > 32767 || result < -32768) {
+                sc_regSet(FLAG_OVERFLOW, 1);
+                return -1;
+            }
+            sc_accumulator = (short int)result;
+            break;
+            
+        case CMD_LOAD:
+            if (sc_memoryGet(operand, &sc_accumulator) != 0) return -1;
+            break;
+            
+        case CMD_STORE:
+            if (sc_memorySet(operand, sc_accumulator) != 0) return -1;
+            break;
+            
+        case CMD_JUMP:
+            sc_instructionCounter = (uint8_t)operand - 1;
+            break;
+            
+        case CMD_JNEG:
+            if (sc_accumulator < 0)
+                sc_instructionCounter = (uint8_t)operand - 1;
+            break;
+            
+        case CMD_JZ:
+            if (sc_accumulator == 0)
+                sc_instructionCounter = (uint8_t)operand - 1;
+            break;
+            
+        case CMD_HALT:
+            sc_running = false;
+            break;
+            
+        case CMD_NOT:
+            if (sc_memorySet(operand, (short int)(~sc_accumulator)) != 0) return -1;
+            break;
+            
+        case CMD_AND:
+            if (sc_memoryGet(operand, &memory_value) != 0) return -1;
+            sc_accumulator = sc_accumulator & memory_value;
+            break;
+            
+        case CMD_OR:
+            if (sc_memoryGet(operand, &memory_value) != 0) return -1;
+            sc_accumulator = sc_accumulator | memory_value;
+            break;
+            
+        case CMD_XOR:
+            if (sc_memoryGet(operand, &memory_value) != 0) return -1;
+            sc_accumulator = sc_accumulator ^ memory_value;
+            break;
+            
+        case CMD_JNS:
+            if (sc_accumulator > 0)
+                sc_instructionCounter = (uint8_t)operand - 1;
+            break;
+        case CMD_READ:
+            // READ - ввод с терминала
+            if (sc_memoryGet(operand, &memory_value) != 0) return -1;
+            printf("\n[READ] Enter value for address 0x%02X (hex): ", operand);
+            fflush(stdout);
+
+            char input[20];
+            if (fgets(input, sizeof(input), stdin)) {
+                int val;
+                sscanf(input, "%x", &val);
+                sc_memorySet(operand, (short int)val);
+            }
+        break;
+
+        case CMD_WRITE:
+            // WRITE - вывод на терминал
+            if (sc_memoryGet(operand, &memory_value) != 0) return -1;
+            printf("\n[WRITE] Address 0x%02X = 0x%04X (%d)\n", 
+                operand, memory_value & 0xFFFF, memory_value);
+            fflush(stdout);
+        break;
+                
+    default:
+        sc_regSet(FLAG_INVALID_COMMAND, 1);
+        return -1;
+}
+    return 0;
 }
 
-// Запуск модели
-void sc_start(void) {
-    if (!sc_running) {
-        sc_running = true;
-        sc_stepMode = false;
-        sc_regSet(IGNORING_TACT_PULSES, false);
-        
-        // Сброс флагов ошибок перед запуском
-        sc_regSet(OVERFLOW, false);
-        sc_regSet(DIVISION_ERR_BY_ZERO, false);
-        sc_regSet(OUT_OF_MEMORY, false);
-        sc_regSet(INCORRECT_COMMAND, false);
-        
-        alarm(1);  // Запуск таймера для тактов
-    }
-}
-
-// Остановка модели
-void sc_stop(void) {
-    sc_running = false;
-    alarm(0);
-}
-
-// Один шаг модели
-void sc_step(void) {
-    if (!sc_running) {
-        sc_running = true;
-        sc_stepMode = true;
-        CU();
-        sc_running = false;
-        sc_stepMode = false;
-        ui_update();  // Обновляем интерфейс после шага
-    }
-}
-
-// Обновленная функция CU с проверкой на останов
+/// Управляющее устройство
 void CU(void) {
-    // Проверка флага игнорирования тактов
-    bool ignoreTact;
-    sc_regGet(IGNORING_TACT_PULSES, &ignoreTact);
-    if (ignoreTact) {
-        return;
-    }
+    int ignoreTact;
+    sc_regGet(FLAG_IGNORE_CLOCK, &ignoreTact);
+    if (ignoreTact) return;
     
-    // Проверка флага ошибки
-    bool errorFlag;
-    sc_regGet(INCORRECT_COMMAND, &errorFlag);
+    int errorFlag;
+    sc_regGet(FLAG_INVALID_COMMAND, &errorFlag);
     if (errorFlag) {
         sc_running = false;
         alarm(0);
         return;
     }
     
-    // Проверка, не вышли ли за пределы памяти
     if (sc_instructionCounter >= SC_MEM_SIZE) {
         sc_instructionCounter = 0;
-        sc_regSet(OUT_OF_MEMORY, true);
+        sc_regSet(FLAG_OUT_OF_MEMORY, 1);
         sc_running = false;
         alarm(0);
         return;
     }
     
-    // Получение текущей команды
-    short int command, operand;
+    int command, operand;
     if (sc_getCurrentCommand(&command, &operand) != 0) {
-        if (!sc_stepMode) {
-            sc_instructionCounter++;
-        }
+        if (!sc_stepMode) sc_instructionCounter++;
         return;
     }
     
-    // Выполнение команды
+    // Если команда HALT - останавливаем
+    if (command == CMD_HALT) {
+        sc_running = false;
+        alarm(0);
+        printf("\n[HALT] Program stopped\n");
+        return;
+    }
+    
     int result = ALU(command, operand);
     
-    // Увеличение счетчика команд (если не было перехода)
-    bool incorrect;
-    sc_regGet(INCORRECT_COMMAND, &incorrect);
+    int incorrect;
+    sc_regGet(FLAG_INVALID_COMMAND, &incorrect);
     if (!incorrect && result == 0 && sc_running) {
-        if (!sc_stepMode) {
-            sc_instructionCounter++;
-        }
+        if (!sc_stepMode) sc_instructionCounter++;
     }
     
-    // Обновляем интерфейс после каждого такта в пошаговом режиме
-    if (sc_stepMode) {
-        ui_update();
+    if (sc_instructionCounter >= SC_MEM_SIZE) {
+        sc_instructionCounter = 0;
+        sc_regSet(FLAG_OUT_OF_MEMORY, 1);
+        sc_running = false;
+        alarm(0);
     }
 }
+
+void IRC(int signum) {
+    int ignoreTact;
+    sc_regGet(FLAG_IGNORE_CLOCK, &ignoreTact);
+    
+    if (signum == SIGALRM) {
+        if (!ignoreTact && sc_running) {
+            CU();
+            
+            int invalid_cmd;
+            sc_regGet(FLAG_INVALID_COMMAND, &invalid_cmd);
+            if (sc_running && !invalid_cmd) {
+                alarm(1);
+            }
+        }
+    } else if (signum == SIGUSR1) {
+        alarm(0);
+        sc_regInit();
+        sc_instructionCounter = 0;
+        sc_accumulator = 0;
+        sc_running = false;
+        sc_stepMode = false;
+    } else if (signum == SIGINT) {
+        // Убираем 'running' - этой переменной нет в SimpleComputer.c
+        sc_running = false;
+        alarm(0);
+    }
+}
+
+/// Запуск модели
+void sc_start(void) {
+    if (!sc_running) {
+        sc_running = true;
+        sc_stepMode = false;
+        
+        sc_regSet(FLAG_OVERFLOW, 0);
+        sc_regSet(FLAG_DIVISION_BY_ZERO, 0);
+        sc_regSet(FLAG_OUT_OF_MEMORY, 0);
+        sc_regSet(FLAG_INVALID_COMMAND, 0);
+        sc_regSet(FLAG_IGNORE_CLOCK, 0);
+        
+        // Для отладки - автоматическая остановка через 3 секунды
+        // Это позволит выйти из бесконечного цикла
+        alarm(3);
+    }
+}
+
+/// Остановка модели
+void sc_stop(void) {
+    sc_running = false;
+    alarm(0);
+}
+
+/// Один шаг модели
+void sc_step(void) {
+    if (!sc_running) {
+        // Сохраняем текущее состояние флага T
+        int old_ignore;
+        sc_regGet(FLAG_IGNORE_CLOCK, &old_ignore);
+        
+        sc_running = true;
+        sc_stepMode = true;
+        
+        // Временно разрешаем выполнение (если было запрещено)
+        sc_regSet(FLAG_IGNORE_CLOCK, 0);
+        
+        // Выполняем одну команду
+        CU();
+        
+        // Восстанавливаем состояние флага T
+        sc_regSet(FLAG_IGNORE_CLOCK, old_ignore);
+        
+        sc_running = false;
+        sc_stepMode = false;
+    }
+}
+

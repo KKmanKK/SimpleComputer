@@ -1,11 +1,13 @@
 //
 // Created by kchipson on 23.04.2020.
 //
+#define _POSIX_C_SOURCE 199309L
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "SimpleComputer.h"
 #include "myUI.h"
@@ -14,11 +16,19 @@
 void signalHandler(int signal);
 int running = 1;
 
+// Функция для задержки в микросекундах
+void delay_us(unsigned int microseconds) {
+    struct timespec req;
+    req.tv_sec = microseconds / 1000000;
+    req.tv_nsec = (microseconds % 1000000) * 1000;
+    nanosleep(&req, NULL);
+}
+
 int main() {
     ui_initial();
     signal(SIGALRM, IRC);      // Обработчик для тактов
     signal(SIGUSR1, IRC);      // Обработчик для сброса
-
+    signal(SIGINT, IRC);
     enum keys key;
     while (running) {
         ui_update();
@@ -27,24 +37,20 @@ int main() {
         if (sc_running) {
             // Неблокирующее чтение клавиши
             rk_myTermRegime(false, 0, 0, false, false);
-            int bytes = read(STDIN_FILENO, &key, sizeof(key));
+            unsigned char ch = 0;  // unsigned char для корректного сравнения
+            int bytes = read(STDIN_FILENO, &ch, 1);
             rk_myTermRestore();
             
             if (bytes > 0) {
-                switch(key) {
-                    case KEY_ESC:
-                        sc_stop();
-                        running = 0;
-                        break;
-                    case KEY_S:
-                        // Принудительный такт
-                        IRC(SIGALRM);
-                        break;
-                    default:
-                        break;
+                if (ch == 27) {  // ESC
+                    sc_stop();
+                    printf("\n[STOP] Model stopped by ESC\n");
+                } else if (ch == 's' || ch == 'S') {
+                    // Принудительный такт
+                    kill(getpid(), SIGALRM);
                 }
             }
-            usleep(10000); // Небольшая задержка для снижения нагрузки
+            delay_us(10000); // Небольшая задержка для снижения нагрузки (10 мс)
         } else {
             // Интерактивный режим - блокирующее чтение
             rk_readKey(&key);

@@ -19,17 +19,16 @@
 #define ACS_HLINE    'q' // Горизонтальная линия
 #define ACS_VLINE    'x' // Вертикальная линия
 
+// Количество символов в шрифте
+#define BIGCHAR_COUNT 19  // 0-9, A-F, +, -
+
 extern unsigned int bc[][2];
 
 int bc_printA(char ch);
-
 int bc_box(int x, int y, int width, int height);
-
 int bc_printBigChar(unsigned int *big, int x, int y, enum colors colorFG, enum colors colorBG);
-
 int bc_setBigCharPos(unsigned int *big, int x, int y, bool value);
 int bc_getbigCharPos(const unsigned int *big, int x, int y, bool *value);
-
 int bc_bigCharWrite(int fd, unsigned int *big, int count);
 int bc_bigCharRead(int fd, unsigned int *big, int need_count, int *count);
 

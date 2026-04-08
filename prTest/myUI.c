@@ -10,6 +10,12 @@
 #include <stdint.h>
 #include "myUI.h"
 #include "myReadkey.h"
+#include <signal.h>      // Добавить для raise() и SIGUSR1
+#include <unistd.h> 
+
+#ifndef FLAG_IGNORE_CLOCK
+#define FLAG_IGNORE_CLOCK 3
+#endif
 
 int8_t currMemCell = 0;
 bool editMode = false;
@@ -30,8 +36,7 @@ int editValueInPlace(int x, int y, short int *value, bool isCommand, int maxValu
 int getMemoryDisplayValue(short int value, char *output);
 int setMemoryFromDisplayValue(const char *input, short int *value);
 
-/// "Инициализация" интерфейса пользователя
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+
 int ui_initial(void) {
     currMemCell = 0;
     editMode = false;
@@ -39,7 +44,7 @@ int ui_initial(void) {
         return -1;
     sc_memoryInit();
     sc_regInit();
-    sc_regSet(IGNORING_TACT_PULSES, true);
+    sc_regSet(FLAG_IGNORE_CLOCK, 1);  // Исправлено: FLAG_IGNORE_CLOCK
     return 0;
 }
 
@@ -113,13 +118,14 @@ int editMemoryInPlace(void) {
             input[pos] = '\0';
             break;
         } else if (ch == 27) { // ESC
+            editMode = false;
             return 0;
         } else if (ch == 127 || ch == 8) { // Backspace
             if (pos > 0) {
                 pos--;
                 printf("\b \b");
             }
-        } else if (isxdigit(ch) || ch == '+' || (pos == 0 && ch == '+')) {
+        } else if (isxdigit((unsigned char)ch) || ch == '+' || (pos == 0 && ch == '+')) {
             if (pos < 5) {
                 input[pos++] = ch;
                 printf("%c", ch);
@@ -141,7 +147,7 @@ int editMemoryInPlace(void) {
 /// Редактирование аккумулятора InPlace
 int editAccumulatorInPlace(void) {
     mt_gotoXY(71, 2);
-    printf("%04X", sc_accumulator);
+    printf("%04X", sc_accumulator & 0xFFFF);
     mt_gotoXY(71, 2);
     
     char input[10] = {0};
@@ -155,13 +161,15 @@ int editAccumulatorInPlace(void) {
             input[pos] = '\0';
             break;
         } else if (ch == 27) {
+            editMode = false;
+            currentEditTarget = TARGET_MEMORY;
             return 0;
         } else if (ch == 127 || ch == 8) {
             if (pos > 0) {
                 pos--;
                 printf("\b \b");
             }
-        } else if (isxdigit(ch)) {
+        } else if (isxdigit((unsigned char)ch)) {
             if (pos < 4) {
                 input[pos++] = ch;
                 printf("%c", ch);
@@ -184,7 +192,7 @@ int editAccumulatorInPlace(void) {
 /// Редактирование счетчика команд InPlace
 int editCounterInPlace(void) {
     mt_gotoXY(71, 5);
-    printf("%04X", sc_instructionCounter);
+    printf("%02X", sc_instructionCounter);
     mt_gotoXY(71, 5);
     
     char input[10] = {0};
@@ -198,13 +206,15 @@ int editCounterInPlace(void) {
             input[pos] = '\0';
             break;
         } else if (ch == 27) {
+            editMode = false;
+            currentEditTarget = TARGET_MEMORY;
             return 0;
         } else if (ch == 127 || ch == 8) {
             if (pos > 0) {
                 pos--;
                 printf("\b \b");
             }
-        } else if (isxdigit(ch)) {
+        } else if (isxdigit((unsigned char)ch)) {
             if (pos < 2) {
                 input[pos++] = ch;
                 printf("%c", ch);
@@ -214,7 +224,7 @@ int editCounterInPlace(void) {
     
     if (strlen(input) > 0) {
         long int value = strtol(input, NULL, 16);
-        if (value <= 0x63) {
+        if (value <= 0x7F) {  // 7 бит для адреса
             sc_instructionCounter = (uint8_t)value;
         }
     }
@@ -309,8 +319,9 @@ int ui_loadMemory(void) {
 int ui_reset(void) {
     if (editMode) return 0;
     
-    sc_regInit();
-    sc_instructionCounter = 0;
+    // Посылаем сигнал прерывания, как при нажатии кнопки Reset
+    raise(SIGUSR1);
+    
     ui_messageOutput((char *)"System reset", GREEN);
     return 0;
 }
@@ -421,12 +432,11 @@ int drawingInstructionCounter(void) {
     return 0;
 }
 
-/// Отрисовка флагов
 int drawingFlags(void) {
-    char tmp[] = {'O', 'Z', 'M', 'I', 'C'};
+    char tmp[] = {'P', '0', 'M', 'T', 'E'};  // Правильные обозначения из задания
     for (int i = 0; i < SC_REG_SIZE; ++i) {
-        bool value;
-        if (sc_regGet(i, &value))
+        int value;  // int вместо _Bool
+        if (sc_regGet(i, &value) != 0)
             return -1;
         mt_gotoXY(68 + (i * 2), 11);
         if (value) {
@@ -445,13 +455,20 @@ int drawingFlags(void) {
 int drawingBigChar(void) {
     short int tmp;
     sc_memoryGet(currMemCell, &tmp);
-    if (!((tmp >> 14) & 1))
-        bc_printBigChar(bc[16], 2, 14, GREEN, DEFAULT);
     
-    tmp &= 0x3FFF;
+    // Проверка знака (если бит 14 = 0, то число положительное)
+    int sign = (tmp >> 14) & 1;
+    if (!sign) {
+        // Индекс 16 для знака "+" (символ '+')
+        if (16 < BIGCHAR_COUNT)
+            bc_printBigChar(bc[16], 2, 14, GREEN, DEFAULT);
+    }
+    
+    tmp &= 0x3FFF;  // Маска для 14 бит (убираем знак)
     for (int i = 0; i < 4; ++i) {
         int ch = (tmp & (0xF << (4 * (3 - i)))) >> (4 * (3 - i));
-        bc_printBigChar(bc[ch], 2 + 8 * (i + 1) + 2 * (i + 1), 14, GREEN, DEFAULT);
+        if (ch < BIGCHAR_COUNT)
+            bc_printBigChar(bc[ch], 2 + 8 * (i + 1) + 2 * (i + 1), 14, GREEN, DEFAULT);
     }
     return 0;
 }
@@ -479,15 +496,17 @@ bool checkCorrectInput(const char buffer[10]) {
 
 int ui_messageOutput(char *str, enum colors color) {
     printf("\033[38;5;%dm%s\033[0m", color, str);
+    fflush(stdout);
     rk_pause(25);
+    // Очистка буфера ввода после паузы
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
     return 0;
 }
 
 int clearBuffIn(void) {
     int c;
-    do {
-        c = getchar();
-    } while (c != '\n' && c != '\0');
+    while ((c = getchar()) != '\n' && c != EOF);
     return 0;
 }
 
