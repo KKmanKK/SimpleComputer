@@ -1,39 +1,72 @@
+# Компилятор и флаги
 CC = gcc
-CFLAGS = -g
+CFLAGS = -Wall -Wextra -Werror -std=c11 -g
+LDFLAGS = 
 
-.PHONY: all clean
+# Директории
+SRCDIR = .
+OBJDIR = obj
+BINDIR = bin
 
-TARGET = SimpleComputer
+# Исходные файлы
+SRCS = $(SRCDIR)/SimpleComputer.c \
+       $(SRCDIR)/myTerm.c \
+       $(SRCDIR)/myBigChars.c \
+       $(SRCDIR)/myReadkey.c \
+       $(SRCDIR)/myUI.c \
+       $(SRCDIR)/main.c
 
-all: mySimpleComputer.a myTerm.a myBigChars.a myReadkey.a SimpleComputer clean
+# Объектные файлы
+OBJS = $(SRCS:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
 
-mySimpleComputer.a:
-	cd mySimpleComputer && $(MAKE)
+# Исполняемый файл
+TARGET = $(BINDIR)/computer
 
-myTerm.a:
-	cd myTerm && $(MAKE)
+# Цель по умолчанию
+all: directories $(TARGET)
 
-myBigChars.a:
-	cd myBigChars && $(MAKE)
+# Создание директорий
+directories:
+	@mkdir -p $(OBJDIR) $(BINDIR)
 
-myReadkey.a:
-	cd myReadkey && $(MAKE)
+# Сборка исполняемого файла
+$(TARGET): $(OBJS)
+	$(CC) $(OBJS) -o $(TARGET) $(LDFLAGS)
 
-SimpleComputer:
-	cd console && $(MAKE)
+# Компиляция .c файлов в .o
+$(OBJDIR)/%.o: $(SRCDIR)/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
+# Очистка объектных файлов
 clean:
-	cd mySimpleComputer && $(MAKE) clean
-	cd myTerm && $(MAKE) clean
-	cd myBigChars && $(MAKE) clean
-	cd myReadkey && $(MAKE) clean
-	cd console && $(MAKE) clean
-	rm -f *.o
+	rm -rf $(OBJDIR)/*.o $(TARGET)
 
-clean_all:
-	cd mySimpleComputer && $(MAKE) clean
-	cd myTerm && $(MAKE) clean
-	cd myBigChars && $(MAKE) clean
-	cd myReadkey && $(MAKE) clean
-	cd console && $(MAKE) clean_all
-	rm -f *.o
+# Полная очистка
+distclean: clean
+	rm -rf $(OBJDIR) $(BINDIR)
+
+# Запуск программы
+run: all
+	./$(TARGET)
+
+# Отладка
+debug: CFLAGS += -DDEBUG -g
+debug: all
+	gdb $(TARGET)
+
+# Проверка с Valgrind
+valgrind: all
+	valgrind --leak-check=full --track-origins=yes ./$(TARGET)
+
+# Справка
+help:
+	@echo "Доступные цели:"
+	@echo "  make all       - собрать проект"
+	@echo "  make run       - собрать и запустить"
+	@echo "  make clean     - удалить объектные файлы"
+	@echo "  make distclean - полная очистка"
+	@echo "  make debug     - собрать с отладочной информацией"
+	@echo "  make valgrind  - проверить утечки памяти"
+	@echo "  make help      - показать эту справку"
+
+.PHONY: all clean distclean run debug valgrind help directories

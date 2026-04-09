@@ -1,103 +1,174 @@
+//
+// Created by kchipson on 19.05.2020.
+//
+
+#include <stdio.h>
+#include <unistd.h>
+#include <stdbool.h>
 #include "myBigChars.h"
 
-int bc_bigcharread(int fd, int *big, int need_count, int *count) {
-    if (fd < 0 || need_count <= 0 || !count) return -1;
+unsigned int bc[][2]  = {{0xE7E7FFFF, 0xFFFFE7E7}, // 0  | 11100111111001111111111111111111 11111111111111111110011111100111
+                         {0x1CDC7C3C, 0xFFFF1C1C}, // 1  | 00011100110111000111110000111100 11111111111111110001110000011100
+                         {0xFF07FFFF, 0xFFFFE0FF}, // 2  | 11111111000001111111111111111111 11111111111111111110000011111111
+                         {0xFF07FFFF, 0xFFFF07FF}, // 3  | 11111111000001111111111111111111 11111111111111110000011111111111
+                         {0xFFE7E7E7, 0x070707FF}, // 4  | 11111111111001111110011111100111 00000111000001110000011111111111
+                         {0xFFE0FFFF, 0xFFFF07FF}, // 5  | 11111111111000001111111111111111 11111111111111110000011111111111
+                         {0xFFE0FFFF, 0xFFFFE7FF}, // 6  | 11111111111000001111111111111111 11111111111111111110011111111111
+                         {0x1C0EFFFE, 0x3838FE38}, // 7  | 00011100000011101111111111111110 00111000001110001111111000111000
+                         {0x7EE7FF7E, 0x7EFFE77E}, // 8  | 01111110111001111111111101111110 01111110111111111110011101111110
+                         {0xFFE7FFFF, 0xFFFF07FF}, // 9  | 11111111111001111111111111111111 11111111111111110000011111111111
+                         {0xFFE7FF7E, 0xE7E7E7FF}, // A  | 11111111111001111111111101111110 11100111111001111110011111111111
+                         {0xFEE7FFFE, 0xFEFFE7FE}, // B  | 11111110111001111111111111111110 11111110111111111110011111111110
+                         {0xE0E7FF7E, 0x7EFFE7E0}, // C  | 11100000111001111111111101111110 01111110111111111110011111100000
+                         {0xE7E7FFF8, 0xF8FFE7E7}, // D  | 11100111111001111111111111111000 11111000111111111110011111100111
+                         {0xFFE0FFFF, 0xFFFFE0FF}, // E  | 11111111111000001111111111111111 11111111111111111110000011111111
+                         {0xFFE0FFFF, 0xE0E0E0FF}, // F  | 11111111111000001111111111111111 11100000111000001110000011111111
+                         {0x7E180000, 0x00000018}, // +  | 01111110000110000000000000000000 00000000000000000001100001111110
+                         {0x7E000000, 0x00000000}, // -  | 01111110000000000000000000000000 00000000000000000000000000000000
+};
 
-    int read_bytes = read(fd, big, need_count * sizeof(int) * 2);
-    *count = read_bytes / (sizeof(int) * 2);
-
-    if (read_bytes >= 0) return 0;
-    else return -1;
+/// Выводит строку символов с использованием дополнительной кодировочной таблицы
+/// \param ch - символ
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int bc_printA(char ch) {
+    printf("\033(0%c\033(B", ch);
+    return 0;
 }
 
-int bc_bigcharwrite(int fd, int *big, int count) {
-    if (fd < 0 || count < 0) return -1;
-
-    long unsigned int result = write(fd, big, count * sizeof(int) * 2);
-    if (result == count * sizeof(int) * 2) return 0;
-    else return -1;
-}
-
-int bc_box(int x1, int y1, int x2, int y2) {
-    if (x1 < 0 || x2 < 0 || y1 < 0 || y2 < 0) return -1;
+/// Выводит на экран псевдографическую рамку
+/// \param x - строка левого вернего угла рамки
+/// \param y - столбец левого вернего угла рамки
+/// \param width - ширина рамки
+/// \param height - высота рамки
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int bc_box(int x, int y, int width, int height) {
+    unsigned int rows, cols;
+    mt_getScreenSize(&rows, &cols);
     
-    printf("\033[%d;%dH\033(0l", x1, y1);
+    // Приводим все к одному типу (int) для корректного сравнения
+    if ((x <= 0) || (y <= 0) || 
+        (x + width - 1 > (int)cols) || 
+        (y + height - 1 > (int)rows) || 
+        (width <= 1) || (height <= 1))
+        return -1;
 
-    for (int i = 1; i < y2; i++) {
-        printf("q");
+    mt_gotoXY(x, y);
+    bc_printA((char)ACS_ULCORNER);
+    mt_gotoXY(x + width - 1, y);
+    bc_printA((char)ACS_URCORNER);
+    mt_gotoXY(x + width - 1, y + height - 1);
+    bc_printA((char)ACS_LRCORNER);
+    mt_gotoXY(x, y + height - 1);
+    bc_printA((char)ACS_LLCORNER);
+
+    /* Горизонтальные линии */
+    for (int i = 1; i < width - 1; ++i) {
+        // верхняя
+        mt_gotoXY(x + i, y);
+        bc_printA((char)ACS_HLINE);
+        // нижняя
+        mt_gotoXY(x + i, y + height - 1);
+        bc_printA((char)ACS_HLINE);
     }
-    printf("k\n\033[%d;%dH", x1 + 1, y1);
 
-    for (int i = 1; i < x2; i++) {
-        printf("x");
-        for (int j = 1; j < y2; j++) {
-            printf(" ");
+    /* Вертикальные линии */
+    for (int i = 1; i < height - 1; ++i) {
+        // левая
+        mt_gotoXY(x, y + i);
+        bc_printA((char)ACS_VLINE);
+        // правая
+        mt_gotoXY(x + width - 1, y + i);
+        bc_printA((char)ACS_VLINE);
+    }
+    return 0;
+}
+
+/// Выводит на экран "большой символ" размером восемь строк на восемь столбцов
+/// \param big
+/// \param x - строка левого вернего угла символа
+/// \param y - столбец левого вернего угла символа
+/// \param colorFG - цвет текста
+/// \param colorBG - цвет фона
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int bc_printBigChar(unsigned int *big, int x, int y, enum colors colorFG, enum colors colorBG) {
+    if (colorFG != DEFAULT)
+        mt_setFGcolor(colorFG);
+    if (colorBG != DEFAULT)
+        mt_setBGcolor(colorBG);
+
+    for (int i = 0; i < 8; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            mt_gotoXY(x + i, y + j);
+            bool value;
+            if (bc_getbigCharPos(big, i, j, &value))
+                return -1;
+            if (value)
+                bc_printA((char)ACS_CKBOARD);
+            else
+                printf("%c", ' ');
         }
-        printf("x\n\033[%d;%dH", x1 + i, y1); 
     }
 
-    printf("m");
+    mt_setDefaultColorSettings();
+    return 0;
+}
 
-    for (int i = 1; i < y2; i++) {
-        printf("q");
+/// Устанавливает значение знакоместа "большого символа"
+/// \param big
+/// \param x - столбец
+/// \param y - строка
+/// \param value - значение
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int bc_setBigCharPos(unsigned int *big, int x, int y, bool value) {
+    if ((x < 0) || (x > 7) || (y < 0) || (y > 7))
+        return -1;
+    if (value)
+        big[(int)(y / 4)] |= (1 << (8 * (y % 4) + (7 - x)));
+    else
+        big[(int)(y / 4)] &= ~(1 << (8 * (y % 4) + (7 - x)));
+    
+    return 0;
+}
+
+/// Возвращает значение позиции в "большом символе"
+/// \param big
+/// \param x - столбец
+/// \param y - строка
+/// \param value
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int bc_getbigCharPos(const unsigned int *big, int x, int y, bool *value) {
+    if ((x < 0) || (x > 7) || (y < 0) || (y > 7))
+        return -1;
+    *value = (big[(int)(y / 4)] & (1 << (8 * (y % 4) + (7 - x)))) != 0;
+    return 0;
+}
+
+/// Записывает заданное число "больших символов" в файл. Формат записи определяется пользователем;
+/// \param fd
+/// \param big
+/// \param count
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int bc_bigCharWrite(int fd, unsigned int *big, int count) {
+    if (write(fd, big, count * 2 * sizeof(unsigned int)) == -1)
+        return -1;
+    return 0;
+}
+
+/// Cчитывает из файла заданное количество "больших символов"
+/// Третий параметр указывает адрес переменной, в которую помещается количество считанных символов или 0, в случае ошибки.
+/// \param fd
+/// \param big
+/// \param need_count
+/// \param count
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int bc_bigCharRead(int fd, unsigned int *big, int need_count, int *count) {
+    *count = 0;
+    for (int i = 0; i < need_count * 2; ++i) {
+        if (read(fd, &big[i], sizeof(unsigned int)) == -1)
+            return -1;
+        if (!((i + 1) % 2))
+            (*count)++;
     }
-    printf("j\n\033(B");
-
-    return 0;
-}
-
-int bc_getbigcharpos(int * big, int x, int y, int *value) {
-    x--; y--;
-    if (x < 0 || y < 0 || x > 7 || y > 7) return -1;  
     
-    int index = (x < 4) ? 0 : 1;
-
-    *value = big[index] >> (y + (x % 4 * 8)) & 0x1;
-
-    return 0;
-}
-
-int bc_printA (char * str) {
-    if (str == NULL) return -1;
-    
-    printf("\033(0%s\033(B", str);   
-    return 0;
-}
-
-int bc_printbigchar (int symbol[2], int x, int y, enum char_color fg_color, enum char_color bg_color) {
-    if (fg_color < BLACK || fg_color > DEFAULT || bg_color < BLACK || fg_color > DEFAULT || x < 0 || y < 0) return -1;
-    printf("\033[%d;%dH\033(0", x, y);
-
-    for (int numbers = 0; numbers < 2; numbers++) {
-        int temp_number = symbol[numbers];
-        for (int i = 0; i < 4; i++) {
-            int temp = temp_number & 0xff;
-            for (int j = 0; j < 8; j++) {
-                int rm_temp = temp & 1;
-                if (rm_temp == 0) printf("\033[4%dm \033[49m", bg_color);
-                else printf("\033[3%dm\033[4%dma\033[39m\033[49m", fg_color, bg_color);
-                temp = temp >> 1;
-            }
-            printf("\n\033[%d;%dH", ++x, y);
-            temp_number = temp_number >> 8; 
-        }        
-    }  
-    printf("\033(B");
-    printf("\033[%d;0H", x);
-
-    return 0;
-}
-
-int bc_setbigcharpos (int * big, int x, int y, int value) {
-    x--; y--;
-    if (x < 0 || y < 0 || x > 7 || y > 7 || value < 0 || value > 1) return -1;    
-
-    int index = (x < 4) ? 0 : 1;
-
-    if (value == 1) 
-        big[index] |= (1 << (y + (x % 4 * 8)));
-    else 
-        big[index] &= (~(1 << (y + (x % 4 * 8))));
-
     return 0;
 }

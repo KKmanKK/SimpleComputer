@@ -1,57 +1,65 @@
+//
+// Created by kchipson on 18.05.2020.
+//
+
 #include <stdio.h>
-#include <unistd.h>
 #include <sys/ioctl.h>
-#include "../include/myTerm.h"
+#include "myTerm.h"
 
-int mt_clrscr(void) {
-    printf("\E[H\E[2J");
-    printf("\033[H");
+/// Производит очистку и перемещение курсора в левый верхний угол экрана
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int mt_clrScreen(void) {
+    printf("\033[H\033[2J");
     return 0;
 }
 
-int mt_gotoXY(int x, int y) {
-    if (x < 0 || y < 0) return -1;
-    printf("\033[%d;%dH", y, x);
+/// Перемещает курсор в указанную позицию
+/// \param col - столбец
+/// \param row - строка
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int mt_gotoXY(unsigned int col, unsigned int row) {
+    unsigned int rows, cols;
+    if (mt_getScreenSize(&rows, &cols) == -1)
+        return -1;
+    if ((row > rows) || (row <= 0) || (col > cols) || (col <= 0))
+        return -1;
+
+    printf("\033[%d;%dH", row, col);
     return 0;
 }
 
-int mt_getscreensize(int* rows, int* cols) {
-    if (rows == NULL || cols == NULL) return -1;
-    else {
-        struct winsize w;
-        ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-        *rows = w.ws_row;
-        *cols = w.ws_col;
-        return 0;
-    }
-}
-
-int mt_setfgcolor(enum color color) {
-    if (color < 0 || color > 7) return -1;
-    printf("\033[3%dm", color);
+/// Определяет размер экрана терминала
+/// \param rows - кол-во строк
+/// \param cols - кол-во столбцов
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int mt_getScreenSize(unsigned int *rows, unsigned int *cols) {
+    struct winsize ws;
+    if (ioctl(1, TIOCGWINSZ, &ws))
+        return -1;
+    *rows = ws.ws_row;
+    *cols = ws.ws_col;
     return 0;
 }
 
-int mt_setbgcolor(enum color color) {
-    if (color < 0 || color > 7) return -1;
-    printf("\033[4%dm", color);
+/// Устанавливает цвет последующих выводимых символов
+/// \param color - цвет из перечисления colors
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int mt_setFGcolor(enum colors color) {
+    printf("\033[38;5;%dm", color);
     return 0;
 }
 
-// int mt_setdefaultcolor(void) {
-//     printf("\033[0m");
-//     return 0;
-// }
+/// Устанавливает цвет фона последующих выводимых символов
+/// \param color - цвет из перечисления colors
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int mt_setBGcolor(enum colors color) {
+    printf("\033[48;5;%dm", color);
+    return 0;
+}
 
-// int mt_setcursorvisible(int value) {
-//     if (value)
-//         printf("\033[?25h");
-//     else
-//         printf("\033[?25l");
-//     return 0;
-// }
-
-// int mt_delline(void) {
-//     printf("\033[2K\r");
-//     return 0;
-// }
+/// Возвращает цвета в стандартное состояние
+/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
+int mt_setDefaultColorSettings(void) {
+    printf("\033[0m");
+    return 0;
+}

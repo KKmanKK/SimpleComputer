@@ -1,5 +1,3 @@
-#include "console.h"
-
 int ALU(int command, int operand) {
 
     switch(command) {
