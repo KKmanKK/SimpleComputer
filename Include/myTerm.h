@@ -1,29 +1,31 @@
-//
-// Created by kchipson on 18.05.2020.
-//
-
 #ifndef MYTERM_H
 #define MYTERM_H
 
-#include <sys/ioctl.h>
+#include <unistd.h>
+
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO 1
+#endif
 
 enum colors {
-    RED = 196,
-    PEACH = 203,
-    GREEN = 10,
-    SOFT_GREEN = 192,
-    BLUE = 20,
-    BLACK = 16,
-    GRAY = 240,
-    WHITE = 15,
-    DEFAULT = 0
+    C_BLACK   = 0,
+    C_RED     = 1,
+    C_GREEN   = 2,
+    C_YELLOW  = 3,
+    C_BLUE    = 4,
+    C_MAGENTA = 5,
+    C_CYAN    = 6,
+    C_WHITE   = 7,
+    C_DEFAULT = 9
 };
 
-int mt_clrScreen(void);
-int mt_gotoXY(unsigned int col, unsigned int row);
-int mt_getScreenSize(unsigned int *rows, unsigned int *cols);
-int mt_setFGcolor(enum colors color);
-int mt_setBGcolor(enum colors color);
-int mt_setDefaultColorSettings(void);
+int mt_clrscr(void);
+int mt_gotoXY(int row, int col);
+int mt_getscreensize(int *rows, int *cols);
+int mt_setfgcolor(enum colors color);
+int mt_setbgcolor(enum colors color);
+int mt_setdefaultcolor(void);
+int mt_setcursorvisible(int value);
+int mt_delline(void);
 
-#endif // MYTERM_H
+#endif /* MYTERM_H */

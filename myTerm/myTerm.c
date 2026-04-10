@@ -1,65 +1,86 @@
-//
-// Created by kchipson on 18.05.2020.
-//
-
-#include <stdio.h>
-#include <sys/ioctl.h>
 #include "myTerm.h"
+#include <stdio.h>
 
-/// Производит очистку и перемещение курсора в левый верхний угол экрана
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int mt_clrScreen(void) {
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/ioctl.h>
+#endif
+
+/* Clear screen */
+int mt_clrscr(void) {
+    /* \033[H  - move cursor to top-left */
+    /* \033[2J - erase entire screen     */
     printf("\033[H\033[2J");
     return 0;
 }
 
-/// Перемещает курсор в указанную позицию
-/// \param col - столбец
-/// \param row - строка
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int mt_gotoXY(unsigned int col, unsigned int row) {
-    unsigned int rows, cols;
-    if (mt_getScreenSize(&rows, &cols) == -1)
-        return -1;
-    if ((row > rows) || (row <= 0) || (col > cols) || (col <= 0))
-        return -1;
+/* Delete current line */
+int mt_delline(void) {
+    /* \033[M - delete current line (dl1) */
+    printf("\033[M");
+    return 0;
+}
 
+/* Get terminal size */
+int mt_getscreensize(int *rows, int *cols) {
+    if (rows == NULL || cols == NULL)
+        return -1;
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+        return -1;
+    *cols = csbi.srWindow.Right  - csbi.srWindow.Left + 1;
+    *rows = csbi.srWindow.Bottom - csbi.srWindow.Top  + 1;
+    if (*rows == 0 || *cols == 0)
+        return -1;
+    return 0;
+#else
+    struct winsize w;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) < 0)
+        return -1;
+    if (w.ws_row == 0 || w.ws_col == 0)
+        return -1;
+    *rows = w.ws_row;
+    *cols = w.ws_col;
+    return 0;
+#endif
+}
+
+/* Move cursor to position */
+int mt_gotoXY(int row, int col) {
+    if (row < 0 || col < 0)
+        return -1;
     printf("\033[%d;%dH", row, col);
     return 0;
 }
 
-/// Определяет размер экрана терминала
-/// \param rows - кол-во строк
-/// \param cols - кол-во столбцов
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int mt_getScreenSize(unsigned int *rows, unsigned int *cols) {
-    struct winsize ws;
-    if (ioctl(1, TIOCGWINSZ, &ws))
+/* Set background color */
+int mt_setbgcolor(enum colors color) {
+    if (color < C_BLACK || color > C_DEFAULT)
         return -1;
-    *rows = ws.ws_row;
-    *cols = ws.ws_col;
+    printf("\033[4%dm", color);
     return 0;
 }
 
-/// Устанавливает цвет последующих выводимых символов
-/// \param color - цвет из перечисления colors
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int mt_setFGcolor(enum colors color) {
-    printf("\033[38;5;%dm", color);
+/* Set cursor visibility */
+int mt_setcursorvisible(int value) {
+    /* \033[?25h - show cursor */
+    /* \033[?25l - hide cursor */
+    printf(value ? "\033[?25h" : "\033[?25l");
     return 0;
 }
 
-/// Устанавливает цвет фона последующих выводимых символов
-/// \param color - цвет из перечисления colors
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int mt_setBGcolor(enum colors color) {
-    printf("\033[48;5;%dm", color);
-    return 0;
-}
-
-/// Возвращает цвета в стандартное состояние
-/// \return 0 - в случае успешного выполнения, -1 - в случае ошибки
-int mt_setDefaultColorSettings(void) {
+/* Reset to default colors */
+int mt_setdefaultcolor(void) {
     printf("\033[0m");
+    return 0;
+}
+
+/* Set foreground color */
+int mt_setfgcolor(enum colors color) {
+    if (color < C_BLACK || color > C_DEFAULT)
+        return -1;
+    printf("\033[3%dm", color);
     return 0;
 }
