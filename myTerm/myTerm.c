@@ -7,47 +7,43 @@
 #include <sys/ioctl.h>
 #endif
 
-/* Clear screen */
+/* Очистка экрана и перемещение курсора в верхний левый угол */
 int mt_clrscr(void) {
-    /* \033[H  - move cursor to top-left */
-    /* \033[2J - erase entire screen     */
-    printf("\033[H\033[2J");
+    printf("\033[H\033[2J");  /* \033[H - курсор в (1,1), \033[2J - очистить экран */
     return 0;
 }
 
-/* Delete current line */
+/* Удаление текущей строки, где находится курсор */
 int mt_delline(void) {
-    /* \033[M - delete current line (dl1) */
-    printf("\033[M");
+    printf("\033[M");  /* \033[M - удалить строку (DL1) */
     return 0;
 }
 
-/* Get terminal size */
+/* Получение размера терминала (количество строк и столбцов) */
 int mt_getscreensize(int *rows, int *cols) {
     if (rows == NULL || cols == NULL)
         return -1;
 #ifdef _WIN32
+    /* Windows: используем GetConsoleScreenBufferInfo */
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
         return -1;
-    *cols = csbi.srWindow.Right  - csbi.srWindow.Left + 1;
-    *rows = csbi.srWindow.Bottom - csbi.srWindow.Top  + 1;
-    if (*rows == 0 || *cols == 0)
-        return -1;
-    return 0;
+    *cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+    *rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 #else
+    /* Linux/Unix: используем ioctl с запросом TIOCGWINSZ */
     struct winsize w;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) < 0)
         return -1;
-    if (w.ws_row == 0 || w.ws_col == 0)
-        return -1;
     *rows = w.ws_row;
     *cols = w.ws_col;
-    return 0;
 #endif
+    if (*rows == 0 || *cols == 0)
+        return -1;
+    return 0;
 }
 
-/* Move cursor to position */
+/* Перемещение курсора в указанную позицию (row - строка, col - столбец) */
 int mt_gotoXY(int row, int col) {
     if (row < 0 || col < 0)
         return -1;
@@ -55,32 +51,30 @@ int mt_gotoXY(int row, int col) {
     return 0;
 }
 
-/* Set background color */
+/* Установка цвета фона для выводимого текста */
 int mt_setbgcolor(enum colors color) {
     if (color < C_BLACK || color > C_DEFAULT)
         return -1;
-    printf("\033[4%dm", color);
+    printf("\033[4%dm", color);  /* \033[4Xm - где X номер цвета (0-7) */
     return 0;
 }
 
-/* Set cursor visibility */
+/* Управление видимостью курсора: 1 - показать, 0 - скрыть */
 int mt_setcursorvisible(int value) {
-    /* \033[?25h - show cursor */
-    /* \033[?25l - hide cursor */
-    printf(value ? "\033[?25h" : "\033[?25l");
+    printf(value ? "\033[?25h" : "\033[?25l");  /* ?25h - показать, ?25l - скрыть */
     return 0;
 }
 
-/* Reset to default colors */
+/* Сброс всех цветовых настроек к значениям по умолчанию */
 int mt_setdefaultcolor(void) {
-    printf("\033[0m");
+    printf("\033[0m");  /* сброс всех атрибутов */
     return 0;
 }
 
-/* Set foreground color */
+/* Установка цвета текста (переднего плана) */
 int mt_setfgcolor(enum colors color) {
     if (color < C_BLACK || color > C_DEFAULT)
         return -1;
-    printf("\033[3%dm", color);
+    printf("\033[3%dm", color);  /* \033[3Xm - где X номер цвета (0-7) */
     return 0;
 }

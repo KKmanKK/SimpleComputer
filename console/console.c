@@ -4,32 +4,36 @@
 #include <unistd.h>
 #include <string.h>
 
-/* Global variables */
-int g_font[FONT_SIZE][2];
-int g_selected = 0;
+/* Глобальные переменные */
+int g_font[FONT_SIZE][2];     /* загруженный шрифт больших символов */
+int g_selected = 0;           /* текущая выбранная ячейка памяти */
 
-/* Circular scroll buffer for IN/OUT */
+/* Кольцевой буфер для блока IN/OUT (хранит 4 последние записи) */
 static struct {
-    int address;
-    int input;
-    int value;
+    int address;    /* адрес ячейки */
+    int input;      /* 1 - ввод, 0 - вывод */
+    int value;      /* значение */
 } history[INOUT_LINES];
 
-static int history_count = 0;
+static int history_count = 0;  /* количество записей в буфере */
 
-/* Helper functions */
+/* ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==================== */
+
+/* Количество ячеек в строке блока памяти (в последней строке может быть меньше) */
 static int cells_in_row(int row) {
     int last = (row + 1) * MEM_CELLS_PER_ROW;
     return (last > MEMORY_SIZE) ? MEMORY_SIZE - row * MEM_CELLS_PER_ROW
                                  : MEM_CELLS_PER_ROW;
 }
 
+/* Получение индекса символа в шрифте (0-9, A-F) */
 static int font_index(char c) {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
     return -1;
 }
 
+/* Вывод числа в двоичной системе (без ведущих нулей) */
 static void print_binary(int value) {
     if (value == 0) {
         printf("0");
@@ -44,15 +48,24 @@ static void print_binary(int value) {
     }
 }
 
-/* Generic field editor */
+/* ==================== РЕДАКТОР ПОЛЯ (IN-PLACE) ==================== */
+
+/* Универсальный редактор поля
+   row,col - позиция на экране
+   width - ширина поля для очистки
+   maxlen - максимальная длина ввода
+   allowed - допустимые символы (NULL - любые печатные)
+   out - буфер для введённой строки */
 static int readField(int row, int col, int width, int maxlen,
                      const char *allowed, char *out) {
+    /* Очистка поля */
     mt_gotoXY(row, col);
     for (int i = 0; i < width; i++)
         putchar(' ');
     mt_gotoXY(row, col);
     fflush(stdout);
 
+    /* Переход в raw режим без эха */
     rk_mytermregime(0, 0, 1, 0, 0);
 
     int len = 0;
@@ -63,12 +76,13 @@ static int readField(int row, int col, int width, int maxlen,
         ssize_t n = read(STDIN_FILENO, &c, 1);
         if (n <= 0) break;
 
-        if (c == '\n' || c == '\r') {
+        if (c == '\n' || c == '\r') {  /* Enter - подтверждение */
             ret = 0;
             break;
         }
 
-        if (c == 0x1B) {
+        if (c == 0x1B) {               /* ESC - отмена */
+            /* Сброс возможных оставшихся байтов escape-последовательности */
             rk_mytermregime(0, 1, 0, 0, 0);
             unsigned char tmp[8];
             read(STDIN_FILENO, tmp, sizeof(tmp));
@@ -77,7 +91,7 @@ static int readField(int row, int col, int width, int maxlen,
             break;
         }
 
-        if ((c == 127 || c == '\b') && len > 0) {
+        if ((c == 127 || c == '\b') && len > 0) {  /* Backspace */
             len--;
             write(STDOUT_FILENO, "\b \b", 3);
             continue;
@@ -85,6 +99,7 @@ static int readField(int row, int col, int width, int maxlen,
 
         if (len >= maxlen) continue;
 
+        /* Проверка допустимости символа */
         int ok;
         if (allowed == NULL) {
             ok = isprint((unsigned char)c);
@@ -96,22 +111,24 @@ static int readField(int row, int col, int width, int maxlen,
         }
         if (!ok) continue;
 
-        write(STDOUT_FILENO, &c, 1);
+        write(STDOUT_FILENO, &c, 1);  /* эхо-вывод */
         out[len++] = (char)c;
     }
 
     out[len] = '\0';
-    rk_mytermregime(0, 0, 1, 0, 1);
+    rk_mytermregime(0, 0, 1, 0, 1);  /* возврат в raw режим с эхом */
     return ret;
 }
 
-/* Public prompt function */
+/* ==================== ФУНКЦИЯ ВВОДА ИМЕНИ ФАЙЛА ==================== */
+
+/* Запрос строки у пользователя (канонический режим) */
 int promptLine(const char *label, char *buf, int bufsz) {
-    rk_mytermregime(1, 0, 0, 1, 1);
+    rk_mytermregime(1, 0, 0, 1, 1);  /* канонический режим с эхом */
     mt_setcursorvisible(1);
 
     mt_gotoXY(PROMPT_ROW, 1);
-    printf("%-*s", MIN_COLS, "");
+    printf("%-*s", MIN_COLS, "");    /* очистка строки */
     mt_gotoXY(PROMPT_ROW, 1);
     printf("%s", label);
     fflush(stdout);
@@ -123,15 +140,17 @@ int promptLine(const char *label, char *buf, int bufsz) {
     }
 
     mt_gotoXY(PROMPT_ROW, 1);
-    printf("%-*s", MIN_COLS, "");
+    printf("%-*s", MIN_COLS, "");    /* очистка строки */
     fflush(stdout);
 
-    rk_mytermregime(0, 0, 1, 0, 1);
+    rk_mytermregime(0, 0, 1, 0, 1);  /* возврат в raw режим */
     mt_setcursorvisible(0);
     return (int)strlen(buf);
 }
 
-/* Drawing functions */
+/* ==================== ФУНКЦИИ ОТРИСОВКИ ИНТЕРФЕЙСА ==================== */
+
+/* Рисование всех рамок интерфейса */
 void drawBoxes(void) {
     bc_box(BOX_MEM_ROW, BOX_MEM_COL, BOX_MEM_H, BOX_MEM_W,
            C_WHITE, C_DEFAULT, "Memory", C_YELLOW, C_DEFAULT);
@@ -154,6 +173,7 @@ void drawBoxes(void) {
     bc_box(BOX_KEYS_ROW, BOX_RP_COL, BOX_KEYS_H, BOX_RP_W,
            C_WHITE, C_DEFAULT, "Keys", C_YELLOW, C_DEFAULT);
 
+    /* Подсказки по клавишам */
     mt_setfgcolor(C_WHITE);
     mt_gotoXY(KEYS_ROW1, RP_COL); printf("l-load  t-save  i-reset");
     mt_gotoXY(KEYS_ROW2, RP_COL); printf("r-run   s-step  ESC-quit");
@@ -161,6 +181,7 @@ void drawBoxes(void) {
     mt_setdefaultcolor();
 }
 
+/* Вывод ячейки памяти на экран в блоке "Memory" */
 void printCell(int address, enum colors fg, enum colors bg) {
     int value;
     if (sc_memoryGet(address, &value) != 0) return;
@@ -176,13 +197,14 @@ void printCell(int address, enum colors fg, enum colors bg) {
     sc_commandDecode(value, &sign, &command, &operand);
 
     if (sign == 1)
-        printf("+%04X ", value & 0xFFFF);
+        printf("+%04X ", value & 0xFFFF);   /* команда с плюсом */
     else
-        printf(" %04X ", value & 0xFFFF);
+        printf(" %04X ", value & 0xFFFF);   /* данные */
 
     mt_setdefaultcolor();
 }
 
+/* Вывод регистра флагов (M E 0 P T) */
 void printFlags(void) {
     static const char letters[FLAG_COUNT] = {'M', 'E', '0', 'P', 'T'};
     int value;
@@ -196,6 +218,7 @@ void printFlags(void) {
     }
 }
 
+/* Вывод декодированной команды (DEC, OCT, HEX, BIN) */
 void printDecodedCommand(int value) {
     mt_gotoXY(DECODED_ROW,     RP_COL); printf("DEC: %-10d",  value);
     mt_gotoXY(DECODED_ROW + 1, RP_COL); printf("OCT: %-10o",  value);
@@ -205,6 +228,7 @@ void printDecodedCommand(int value) {
     printf("          ");
 }
 
+/* Вывод аккумулятора (десятичный и шестнадцатеричный) */
 void printAccumulator(void) {
     int value;
     sc_accumulatorGet(&value);
@@ -212,6 +236,7 @@ void printAccumulator(void) {
     mt_gotoXY(ACC_ROW + 1, RP_COL); printf("HEX: %-10X",  (unsigned int)value);
 }
 
+/* Вывод счётчика команд */
 void printCounters(void) {
     int value;
     sc_icounterGet(&value);
@@ -219,6 +244,7 @@ void printCounters(void) {
     printf("IC: %-4d", value);
 }
 
+/* Очистка блока IN/OUT */
 void printTermClear(void) {
     history_count = 0;
     for (int i = 0; i < INOUT_LINES; i++) {
@@ -228,10 +254,12 @@ void printTermClear(void) {
     fflush(stdout);
 }
 
+/* Вывод строки в блок IN/OUT (с прокруткой) */
 void printTerm(int address, int input) {
     int value = 0;
     sc_memoryGet(address, &value);
 
+    /* Добавление записи в буфер */
     if (history_count < INOUT_LINES) {
         history[history_count].address = address;
         history[history_count].input   = input;
@@ -245,6 +273,7 @@ void printTerm(int address, int input) {
         history[INOUT_LINES - 1].value   = value;
     }
 
+    /* Перерисовка всех строк */
     for (int i = 0; i < history_count; i++) {
         mt_gotoXY(INOUT_ROW + i, INOUT_COL);
         if (history[i].input)
@@ -254,6 +283,7 @@ void printTerm(int address, int input) {
     }
 }
 
+/* Вывод текущей команды (по адресу из счётчика команд) */
 void printCommand(void) {
     int ic;
     sc_icounterGet(&ic);
@@ -269,7 +299,7 @@ void printCommand(void) {
     if (sign == 1) {
         int valid = sc_commandValidate(command);
         if (valid != 0)
-            printf("! +%d : %-3d      ", command, operand);
+            printf("! +%d : %-3d      ", command, operand);  /* неверная команда */
         else
             printf("  +%d : %-3d      ", command, operand);
     } else {
@@ -277,16 +307,19 @@ void printCommand(void) {
     }
 }
 
+/* Вывод больших символов аккумулятора (блок "Accumulator" большими цифрами) */
 void printBigChars(void) {
     int value;
     sc_accumulatorGet(&value);
 
+    /* Вывод знака "+" если старший бит установлен */
     if ((value >> 16) & 1)
         bc_printbigchar(g_font[16], BIGCHAR_ROW, 2, C_GREEN, C_DEFAULT);
 
     char digits[5];
     snprintf(digits, sizeof(digits), "%04X", value & 0xFFFF);
 
+    /* Вывод цифр справа налево */
     int col = BIGCHAR_COL;
     for (int i = 3; i >= 0; i--) {
         int idx = font_index(digits[i]);
@@ -296,6 +329,7 @@ void printBigChars(void) {
     }
 }
 
+/* Вывод больших символов выбранной ячейки (блок "Cell" большими цифрами) */
 void printBigCell(void) {
     int value = 0;
     sc_memoryGet(g_selected, &value);
@@ -320,7 +354,9 @@ void printBigCell(void) {
     }
 }
 
-/* Cursor movement */
+/* ==================== ПЕРЕМЕЩЕНИЕ КУРСОРА ==================== */
+
+/* Перемещение выбранной ячейки в блоке памяти по стрелкам */
 void moveCursor(enum keys dir) {
     int total_rows = (MEMORY_SIZE + MEM_CELLS_PER_ROW - 1) / MEM_CELLS_PER_ROW;
     int row = g_selected / MEM_CELLS_PER_ROW;
@@ -353,7 +389,9 @@ void moveCursor(enum keys dir) {
     g_selected = row * MEM_CELLS_PER_ROW + col;
 }
 
-/* InPlace editors */
+/* ==================== IN-PLACE РЕДАКТОРЫ ==================== */
+
+/* Редактирование ячейки памяти (ввод в шестнадцатеричном формате) */
 int editCellInPlace(int address) {
     int row = MEM_ROW_ORIGIN + (address / MEM_CELLS_PER_ROW);
     int col = MEM_COL_ORIGIN + (address % MEM_CELLS_PER_ROW) * MEM_CELL_WIDTH;
@@ -382,6 +420,7 @@ int editCellInPlace(int address) {
     return 0;
 }
 
+/* Редактирование аккумулятора (ввод десятичного числа) */
 int editAccumulatorInPlace(void) {
     char buf[12];
     if (readField(ACC_ROW, RP_COL + 5, 10, 6,
@@ -398,6 +437,7 @@ int editAccumulatorInPlace(void) {
     return 0;
 }
 
+/* Редактирование счётчика команд (ввод десятичного адреса) */
 int editICInPlace(void) {
     char buf[6];
     if (readField(IC_ROW, RP_COL + 4, 6, 3,
@@ -414,7 +454,9 @@ int editICInPlace(void) {
     return 0;
 }
 
-/* Screen refresh */
+/* ==================== ОБНОВЛЕНИЕ ЭКРАНА ==================== */
+
+/* Обновление панелей, зависящих от выбранной ячейки */
 void refreshSelected(void) {
     int val = 0;
     sc_memoryGet(g_selected, &val);
@@ -423,11 +465,12 @@ void refreshSelected(void) {
     fflush(stdout);
 }
 
+/* Полное обновление всего экрана */
 void refreshAll(void) {
     printTermClear();
     for (int i = 0; i < MEMORY_SIZE; i++) {
         if (i == g_selected)
-            printCell(i, C_BLACK, C_WHITE);
+            printCell(i, C_BLACK, C_WHITE);   /* подсветка выбранной ячейки */
         else
             printCell(i, C_DEFAULT, C_DEFAULT);
     }
